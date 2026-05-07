@@ -22,12 +22,7 @@ export interface GeometrySchema {
   };
 }
 
-export interface GeometryInstance {
-  type: string;
-  geometry: THREE.BufferGeometry;
-  material: THREE.Material;
-  mesh: THREE.Mesh;
-}
+
 
 export const defaultSchemas: GeometrySchema[] = [
   // 1. 立方体
@@ -250,6 +245,101 @@ export const defaultSchemas: GeometrySchema[] = [
       { name: 'p', label: '扭结参数p', type: 'number', default: 2, min: 1, max: 10, step: 1 },
       { name: 'q', label: '扭结参数q', type: 'number', default: 3, min: 1, max: 10, step: 1 },
       { name: 'color', label: '颜色', type: 'color', default: '#eb2f96' }
+    ],
+    previewConfig: {
+      scale: 1,
+      position: [0, 0.5, 0]
+    }
+  },
+  // 15. 茶壶
+  {
+    type: 'teapot',
+    label: '茶壶',
+    icon: '🍵',
+    properties: [
+      { name: 'size', label: '尺寸', type: 'number', default: 1, min: 0.5, max: 3, step: 0.1 },
+      { name: 'color', label: '颜色', type: 'color', default: '#d4a373' }
+    ],
+    previewConfig: {
+      scale: 1,
+      position: [0, 0.5, 0]
+    }
+  },
+  // 16. 椅子
+  {
+    type: 'chair',
+    label: '椅子',
+    icon: '🪑',
+    properties: [
+      { name: 'size', label: '尺寸', type: 'number', default: 1, min: 0.5, max: 3, step: 0.1 },
+      { name: 'color', label: '颜色', type: 'color', default: '#8b4513' }
+    ],
+    previewConfig: {
+      scale: 1,
+      position: [0, 0.5, 0]
+    }
+  },
+  // 17. 桌子
+  {
+    type: 'table',
+    label: '桌子',
+    icon: '🪔',
+    properties: [
+      { name: 'size', label: '尺寸', type: 'number', default: 1, min: 0.5, max: 3, step: 0.1 },
+      { name: 'color', label: '颜色', type: 'color', default: '#654321' }
+    ],
+    previewConfig: {
+      scale: 1,
+      position: [0, 0.35, 0]
+    }
+  },
+  // 18. GLB模型
+  {
+    type: 'glbModel',
+    label: 'GLB模型',
+    icon: '📦',
+    properties: [
+      { name: 'modelUrl', label: '模型地址', type: 'string', default: '' },
+      { name: 'scale', label: '缩放', type: 'number', default: 1, min: 0.1, max: 10, step: 0.1 }
+    ],
+    previewConfig: {
+      scale: 1,
+      position: [0, 0.5, 0]
+    }
+  },
+  // 19. 机器人模型 (示例)
+  {
+    type: 'glbCar',
+    label: '机器人模型',
+    icon: '/model/glb.png',
+    properties: [
+      { name: 'scale', label: '缩放', type: 'number', default: 1, min: 0.5, max: 3, step: 0.1 }
+    ],
+    previewConfig: {
+      scale: 1,
+      position: [0, 0.5, 0]
+    }
+  },
+  // 20. 机器人模型 (示例)
+  {
+    type: 'glbRobot',
+    label: '机器人模型',
+    icon: '🤖',
+    properties: [
+      { name: 'scale', label: '缩放', type: 'number', default: 1, min: 0.5, max: 3, step: 0.1 }
+    ],
+    previewConfig: {
+      scale: 1,
+      position: [0, 0.5, 0]
+    }
+  },
+  // 21. 家具模型 (示例)
+  {
+    type: 'glbFurniture',
+    label: '家具模型',
+    icon: '🛋️',
+    properties: [
+      { name: 'scale', label: '缩放', type: 'number', default: 1, min: 0.5, max: 3, step: 0.1 }
     ],
     previewConfig: {
       scale: 1,

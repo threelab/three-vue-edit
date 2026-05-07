@@ -86,7 +86,8 @@
             @click="startAddGeometry(schema.type)"
             :title="schema.label"
           >
-            <span>{{ schema.icon }}</span>
+            <img v-if="schema.icon.startsWith('/')" class="geometry-tool-icon" :src="schema.icon" :alt="schema.label" />
+            <span v-else>{{ schema.icon }}</span>
           </div>
         </div>
         <div class="toolbar-divider"></div>
@@ -101,20 +102,6 @@
             :title="schema.label"
           >
             <span>{{ schema.icon }}</span>
-          </div>
-        </div>
-        <div class="toolbar-divider"></div>
-        <div class="model-library">
-          <div class="tool-group-label">模型库</div>
-          <div 
-            v-for="model in modelLibrary" 
-            :key="model.type"
-            class="model-tool-item"
-            :class="{ active: isAddingModel && selectedModelType === model.type }"
-            @click="startAddModel(model.type)"
-            :title="model.label"
-          >
-            <span>{{ model.icon }}</span>
           </div>
         </div>
         <div class="toolbar-divider"></div>
@@ -144,10 +131,6 @@
         <div v-if="isAddingLight" class="add-light-hint">
           <span>💡</span>
           <span>移动鼠标到目标位置，点击添加{{ getCurrentLightLabel() }}</span>
-        </div>
-        <div v-if="isAddingModel" class="add-model-hint">
-          <span>{{ getCurrentModelIcon() }}</span>
-          <span>移动鼠标到目标位置，点击添加{{ getCurrentModelLabel() }}</span>
         </div>
       </main>
 
@@ -319,40 +302,6 @@ const isAddingLight = ref(false);
 const selectedLightType = ref<string>('point');
 const currentLightProperties = ref<LightProperties>({});
 const previewLight: { light?: THREE.Light; helper?: THREE.Object3D } = {};
-const isAddingModel = ref(false);
-const selectedModelType = ref<string>('teapot');
-
-interface ModelLibraryItem {
-  type: string;
-  label: string;
-  icon: string;
-  create: () => any;
-  yOffset: number;
-}
-
-const modelLibrary: ModelLibraryItem[] = [
-  {
-    type: 'teapot',
-    label: '茶壶',
-    icon: '🍵',
-    yOffset: 0.5,
-    create: () => createTeapotModel()
-  },
-  {
-    type: 'chair',
-    label: '椅子',
-    icon: '🪑',
-    yOffset: 0.5,
-    create: () => createChairModel()
-  },
-  {
-    type: 'table',
-    label: '桌子',
-    icon: '🪔',
-    yOffset: 0.35,
-    create: () => createTableModel()
-  }
-];
 
 interface SceneObjectInfo {
   id: number;
@@ -385,18 +334,17 @@ const totalFaces = computed(() => sceneObjects.value.length * 12);
 let sceneManager: SceneManager | null = null;
 let objectIdCounter = 1;
 let selectedMesh: THREE.Object3D | null = null;
-let previewGeometry: THREE.Mesh | null = null;
+let previewGeometry: THREE.Object3D | null = null;
 let raycaster: THREE.Raycaster | null = null;
 let mouse: THREE.Vector2 | null = null;
 let gridPlane: THREE.Plane | null = null;
-let previewModelInstance: any = null;
 
 const setTransformMode = (mode: 'translate' | 'rotate' | 'scale') => {
   transformMode.value = mode;
   sceneManager?.setTransformMode(mode);
 };
 
-const startAddGeometry = (type: string) => {
+const startAddGeometry = async (type: string) => {
   if (!sceneManager) return;
   
   if (isAddingGeometry.value && selectedGeometryType.value === type) {
@@ -409,7 +357,7 @@ const startAddGeometry = (type: string) => {
   isAddingGeometry.value = true;
   
   loadDefaultProperties(type);
-  createPreviewGeometry();
+  await createPreviewGeometry();
 };
 
 const loadDefaultProperties = (type: string) => {
@@ -419,22 +367,65 @@ const loadDefaultProperties = (type: string) => {
   }
 };
 
-const createPreviewGeometry = () => {
+const createPreviewGeometry = async () => {
   if (!sceneManager) return;
   
   removePreviewGeometry();
   
-  previewGeometry = sceneManager.createPreviewGeometry(selectedGeometryType.value, [0, 0.5, 0]);
-  sceneManager.scene.add(previewGeometry);
+  // 如果是 GLB 模型类型，异步加载真实模型作为预览
+  if (isGLBModelType(selectedGeometryType.value)) {
+    try {
+      const instance = await geometryFactory.createGLBModel(selectedGeometryType.value, {
+        position: [0, getGeometryYOffset(selectedGeometryType.value), 0],
+        properties: { ...currentGeometryProperties.value }
+      });
+      
+      // 应用半透明效果
+      instance.materials.forEach(material => {
+        if (material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshPhongMaterial) {
+          material.transparent = true;
+          material.opacity = 0.6;
+          if (material instanceof THREE.MeshStandardMaterial) {
+            material.emissive = new THREE.Color('#40a9ff');
+            material.emissiveIntensity = 0.3;
+          }
+        }
+      });
+      
+      previewGeometry = instance.object;
+      previewGeometry.name = 'PreviewGeometry';
+      sceneManager.scene.add(previewGeometry);
+    } catch (error) {
+      console.error('Failed to load preview model:', error);
+      // 加载失败时使用占位几何体
+      previewGeometry = sceneManager.createPreviewGeometry(selectedGeometryType.value, [0, 0.5, 0]);
+      sceneManager.scene.add(previewGeometry);
+    }
+  } else {
+    // 普通几何体使用常规预览
+    previewGeometry = sceneManager.createPreviewGeometry(selectedGeometryType.value, [0, 0.5, 0]);
+    sceneManager.scene.add(previewGeometry);
+  }
 };
 
 const removePreviewGeometry = () => {
   if (previewGeometry && sceneManager) {
     sceneManager.scene.remove(previewGeometry);
-    if (previewGeometry.geometry) {
-      previewGeometry.geometry.dispose();
-    }
-    (previewGeometry.material as THREE.Material).dispose();
+    
+    // 清理资源
+    previewGeometry.traverse((child: THREE.Object3D) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry?.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m: THREE.Material) => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      }
+    });
+    
     previewGeometry = null;
   }
 };
@@ -505,12 +496,27 @@ const getGeometryYOffset = (type: string): number => {
       return 0.5;
     case 'plane':
       return 0;
-    default:
+    case 'teapot':
+      return 0.5 * ((props.size as number) || 1);
+    case 'chair':
+      return 0.5 * ((props.size as number) || 1);
+    case 'table':
+      return 0.35 * ((props.size as number) || 1);
+    case 'glbModel':
+    case 'glbCar':
+    case 'glbRobot':
+    case 'glbFurniture':
       return 0.5;
+    default:
+      return schema.previewConfig.position[1];
   }
 };
 
-const handleSceneClick = (event: MouseEvent) => {
+const isGLBModelType = (type: string): boolean => {
+  return ['glbModel', 'glbCar', 'glbRobot', 'glbFurniture'].includes(type);
+};
+
+const handleSceneClick = async (event: MouseEvent) => {
   if (!isAddingGeometry.value || !sceneManager || !containerRef.value) return;
   
   const rect = containerRef.value.getBoundingClientRect();
@@ -534,14 +540,14 @@ const handleSceneClick = (event: MouseEvent) => {
   raycaster.ray.intersectPlane(gridPlane, intersectPoint);
   
   if (intersectPoint) {
-    addGeometryAtPosition(intersectPoint.x, intersectPoint.z);
+    await addGeometryAtPosition(intersectPoint.x, intersectPoint.z);
   }
   
   isAddingGeometry.value = false;
   removePreviewGeometry();
 };
 
-const addGeometryAtPosition = (x: number, z: number) => {
+const addGeometryAtPosition = async (x: number, z: number) => {
   if (!sceneManager) return;
   
   const yOffset = getGeometryYOffset(selectedGeometryType.value);
@@ -551,11 +557,33 @@ const addGeometryAtPosition = (x: number, z: number) => {
     Math.round(z * 10) / 10
   ];
   
-  const geometry = sceneManager.createGeometry({
-    type: selectedGeometryType.value,
-    position,
-    properties: { ...currentGeometryProperties.value }
-  });
+  let geometry: THREE.Object3D;
+  
+  // GLB相关类型都需要异步加载
+  if (isGLBModelType(selectedGeometryType.value)) {
+    try {
+      const instance = await geometryFactory.createGLBModel(selectedGeometryType.value, {
+        position,
+        properties: { ...currentGeometryProperties.value }
+      });
+      geometry = instance.object;
+    } catch (error) {
+      console.error('Failed to load GLB model:', error);
+      // 加载失败时创建占位几何体
+      geometry = sceneManager.createGeometry({
+        type: selectedGeometryType.value,
+        position,
+        properties: { ...currentGeometryProperties.value }
+      });
+    }
+  } else {
+    // 普通几何体类型直接创建
+    geometry = sceneManager.createGeometry({
+      type: selectedGeometryType.value,
+      position,
+      properties: { ...currentGeometryProperties.value }
+    });
+  }
   
   geometry.userData = { id: objectIdCounter, type: selectedGeometryType.value };
   sceneManager.addObject(geometry);
@@ -566,7 +594,7 @@ const addGeometryAtPosition = (x: number, z: number) => {
   sceneObjects.value.push({
     id: objectIdCounter,
     name: `${label}_${objectIdCounter}`,
-    type: 'Mesh',
+    type: geometry instanceof THREE.Group ? 'Group' : 'Mesh',
     geometryType: selectedGeometryType.value,
     visible: true,
     position: { x: geometry.position.x, y: geometry.position.y, z: geometry.position.z },
@@ -858,219 +886,6 @@ const updatePreviewLight = () => {
   }
 };
 
-const createTeapotModel = (): any => {
-  const group = new (THREE as any).Group();
-  
-  const bodyGeometry = new THREE.CylinderGeometry(0.4, 0.35, 0.6, 32);
-  const lidGeometry = new THREE.CylinderGeometry(0.42, 0.4, 0.15, 32);
-  const spoutGeometry = new THREE.TorusGeometry(0.15, 0.08, 8, 16);
-  const handleGeometry = new THREE.TorusGeometry(0.3, 0.08, 8, 16);
-  
-  const material = new THREE.MeshStandardMaterial({ color: 0xd4a373, metalness: 0.2, roughness: 0.4 });
-  
-  const body = new THREE.Mesh(bodyGeometry, material);
-  body.position.y = 0.3;
-  body.castShadow = true;
-  
-  const lid = new THREE.Mesh(lidGeometry, material);
-  lid.position.y = 0.75;
-  lid.castShadow = true;
-  
-  const spout = new THREE.Mesh(spoutGeometry, material);
-  spout.position.set(0.45, 0.3, 0);
-  spout.rotation.z = -Math.PI / 2;
-  spout.castShadow = true;
-  
-  const handle = new THREE.Mesh(handleGeometry, material);
-  handle.position.set(-0.35, 0.35, 0);
-  handle.rotation.z = Math.PI / 2;
-  handle.castShadow = true;
-  
-  group.add(body, lid, spout, handle);
-  return group;
-};
-
-const createChairModel = (): any => {
-  const group = new (THREE as any).Group();
-  
-  const seatGeometry = new THREE.BoxGeometry(0.5, 0.08, 0.5);
-  const legGeometry = new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8);
-  const backGeometry = new THREE.BoxGeometry(0.5, 0.6, 0.05);
-  
-  const material = new THREE.MeshStandardMaterial({ color: 0x8b4513, metalness: 0.1, roughness: 0.6 });
-  
-  const seat = new THREE.Mesh(seatGeometry, material);
-  seat.position.y = 0.5;
-  seat.castShadow = true;
-  
-  const legPositions = [
-    [-0.2, 0.25, -0.2], [0.2, 0.25, -0.2],
-    [-0.2, 0.25, 0.2], [0.2, 0.25, 0.2]
-  ];
-  
-  legPositions.forEach(pos => {
-    const leg = new THREE.Mesh(legGeometry, material);
-    leg.position.set(pos[0], pos[1], pos[2]);
-    leg.castShadow = true;
-    group.add(leg);
-  });
-  
-  const back = new THREE.Mesh(backGeometry, material);
-  back.position.set(0, 0.85, -0.225);
-  back.castShadow = true;
-  
-  group.add(seat, back);
-  return group;
-};
-
-const createTableModel = (): any => {
-  const group = new (THREE as any).Group();
-  
-  const topGeometry = new THREE.CylinderGeometry(0.7, 0.7, 0.08, 32);
-  const legGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.6, 8);
-  
-  const material = new THREE.MeshStandardMaterial({ color: 0x654321, metalness: 0.1, roughness: 0.7 });
-  
-  const top = new THREE.Mesh(topGeometry, material);
-  top.position.y = 0.65;
-  top.castShadow = true;
-  
-  const legPositions = [
-    [-0.45, 0.3, -0.45], [0.45, 0.3, -0.45],
-    [-0.45, 0.3, 0.45], [0.45, 0.3, 0.45]
-  ];
-  
-  legPositions.forEach(pos => {
-    const leg = new THREE.Mesh(legGeometry, material);
-    leg.position.set(pos[0], pos[1], pos[2]);
-    leg.castShadow = true;
-    group.add(leg);
-  });
-  
-  group.add(top);
-  return group;
-};
-
-const startAddModel = (type: string) => {
-  if (!sceneManager) return;
-  
-  if (isAddingModel.value && selectedModelType.value === type) {
-    isAddingModel.value = false;
-    removePreviewModel();
-    return;
-  }
-  
-  selectedModelType.value = type;
-  isAddingModel.value = true;
-  isAddingGeometry.value = false;
-  isAddingLight.value = false;
-  removePreviewGeometry();
-  removePreviewLight();
-  createPreviewModel();
-};
-
-const createPreviewModel = () => {
-  if (!sceneManager) return;
-  
-  removePreviewModel();
-  
-  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
-  if (modelConfig) {
-    previewModelInstance = modelConfig.create();
-    sceneManager.scene.add(previewModelInstance);
-  }
-};
-
-const removePreviewModel = () => {
-  if (previewModelInstance && sceneManager) {
-    sceneManager.scene.remove(previewModelInstance);
-    previewModelInstance.traverse((child: any) => {
-      if (child instanceof THREE.Mesh) {
-        if (child.geometry) {
-          child.geometry.dispose();
-        }
-        if (child.material) {
-          (child.material as THREE.Material).dispose();
-        }
-      }
-    });
-    previewModelInstance = null;
-  }
-};
-
-const updatePreviewModelPosition = (event: MouseEvent) => {
-  if (!isAddingModel.value || !previewModelInstance || !sceneManager || !containerRef.value) return;
-  
-  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
-  if (!modelConfig) return;
-  
-  const rect = containerRef.value.getBoundingClientRect();
-  const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-  
-  if (!raycaster) {
-    raycaster = new THREE.Raycaster();
-  }
-  if (!mouse) {
-    mouse = new THREE.Vector2();
-  }
-  if (!gridPlane) {
-    gridPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  }
-  
-  mouse.set(mouseX, mouseY);
-  raycaster.setFromCamera(mouse, sceneManager.camera);
-  
-  const intersectPoint = new THREE.Vector3();
-  raycaster.ray.intersectPlane(gridPlane, intersectPoint);
-  
-  if (intersectPoint) {
-    previewModelInstance.position.set(
-      Math.round(intersectPoint.x * 10) / 10,
-      modelConfig.yOffset,
-      Math.round(intersectPoint.z * 10) / 10
-    );
-  }
-};
-
-const handleModelClick = () => {
-  if (!isAddingModel.value || !previewModelInstance || !sceneManager) return;
-  
-  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
-  if (!modelConfig) return;
-  
-  const model = modelConfig.create();
-  model.position.copy(previewModelInstance.position);
-  model.userData = { id: objectIdCounter, type: selectedModelType.value };
-  sceneManager.addObject(model);
-  
-  sceneObjects.value.push({
-    id: objectIdCounter,
-    name: `${modelConfig.label}_${objectIdCounter}`,
-    type: 'Group',
-    geometryType: selectedModelType.value,
-    visible: true,
-    position: { x: model.position.x, y: model.position.y, z: model.position.z },
-    rotation: { x: 0, y: 0, z: 0 },
-    scale: { x: 1, y: 1, z: 1 }
-  });
-  
-  objectIdCounter++;
-  
-  isAddingModel.value = false;
-  removePreviewModel();
-};
-
-const getCurrentModelIcon = (): string => {
-  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
-  return modelConfig?.icon || '📦';
-};
-
-const getCurrentModelLabel = (): string => {
-  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
-  return modelConfig?.label || selectedModelType.value;
-};
-
 const syncObjectProperties = () => {
   if (!selectedMesh || selectedObjectId.value === null) return;
   
@@ -1092,8 +907,6 @@ const handleMouseMove = (event: MouseEvent) => {
     updatePreviewGeometryPosition(event);
   } else if (isAddingLight.value) {
     updatePreviewLightPosition(event);
-  } else if (isAddingModel.value) {
-    updatePreviewModelPosition(event);
   }
 };
 
@@ -1102,8 +915,6 @@ const handleClick = (event: MouseEvent) => {
     handleSceneClick(event);
   } else if (isAddingLight.value) {
     handleLightClick();
-  } else if (isAddingModel.value) {
-    handleModelClick();
   } else {
     handleObjectSelection(event);
   }
@@ -1126,13 +937,16 @@ const handleObjectSelection = (event: MouseEvent) => {
   mouse.set(mouseX, mouseY);
   raycaster.setFromCamera(mouse, sceneManager.camera);
   
-  const objects = sceneManager.scene.children.filter((obj: THREE.Object3D) => obj instanceof THREE.Mesh && obj.name !== 'PreviewCube');
-  const intersects = raycaster.intersectObjects(objects);
+  const allObjects = sceneManager.getObjects();
+  const intersects = raycaster.intersectObjects(allObjects, true);
   
   if (intersects.length > 0) {
-    const clickedObject = intersects[0].object as THREE.Mesh;
-    if (clickedObject.userData.id) {
-      selectObjectById(clickedObject.userData.id);
+    let target = intersects[0].object;
+    while (target.parent && !allObjects.includes(target)) {
+      target = target.parent;
+    }
+    if (target.userData.id) {
+      selectObjectById(target.userData.id);
     }
   } else {
     sceneManager.deselectObject();
@@ -1161,9 +975,6 @@ const handleKeyDown = (event: KeyboardEvent) => {
     } else if (isAddingLight.value) {
       isAddingLight.value = false;
       removePreviewLight();
-    } else if (isAddingModel.value) {
-      isAddingModel.value = false;
-      removePreviewModel();
     }
   }
 };
@@ -1177,10 +988,6 @@ const handleContextMenu = (event: MouseEvent) => {
     event.preventDefault();
     isAddingLight.value = false;
     removePreviewLight();
-  } else if (isAddingModel.value) {
-    event.preventDefault();
-    isAddingModel.value = false;
-    removePreviewModel();
   }
 };
 
@@ -1391,6 +1198,12 @@ html, body, #app {
 .geometry-tool-item.active {
   background: #1890ff;
   color: #fff;
+}
+
+.geometry-tool-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
 
 /* 中间场景区域 */

@@ -12,7 +12,8 @@
         :class="{ active: selectedType === schema.type }"
         @click="selectGeometry(schema.type)"
       >
-        <span class="geometry-icon">{{ schema.icon }}</span>
+        <img v-if="schema.icon.startsWith('/')" class="geometry-icon-img" :src="schema.icon" :alt="schema.label" />
+        <span v-else class="geometry-icon">{{ schema.icon }}</span>
         <span class="geometry-label">{{ schema.label }}</span>
       </div>
     </div>
@@ -163,6 +164,13 @@ loadDefaultProperties();
 .geometry-icon {
   font-size: 24px;
   margin-bottom: 4px;
+}
+
+.geometry-icon-img {
+  width: 24px;
+  height: 24px;
+  margin-bottom: 4px;
+  object-fit: contain;
 }
 
 .geometry-label {

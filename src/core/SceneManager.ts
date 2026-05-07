@@ -190,7 +190,7 @@ export class SceneManager {
     return cube;
   }
 
-  public createGeometry(options: CreateGeometryOptions): THREE.Mesh {
+  public createGeometry(options: CreateGeometryOptions): THREE.Object3D {
     const {
       type,
       position = [0, 0.5, 0],
@@ -206,21 +206,26 @@ export class SceneManager {
       properties
     });
 
-    const mesh = instance.mesh;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    const object = instance.object;
+    
+    // 设置阴影
+    object.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
 
-    return mesh;
+    return object;
   }
 
-  public createPreviewGeometry(type: string, position: [number, number, number]): THREE.Mesh {
+  public createPreviewGeometry(type: string, position: [number, number, number]): THREE.Object3D {
     const instance = geometryFactory.createPreview(type, {
       position,
       scale: [1, 1, 1]
     });
 
-    const mesh = instance.mesh;
-    return mesh;
+    return instance.object;
   }
 
   public getAllGeometryTypes() {
