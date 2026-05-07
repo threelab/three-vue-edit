@@ -1,5 +1,57 @@
-# Vue 3 + TypeScript + Vite
+# 3D Model Editor
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+基于 Vue3 + Three.js 构建的现代化3D模型编辑器框架。
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## 声明
+
+本项目仅用于**学习和研究**目的。
+
+**版权所有** © 2026 threelab 团队
+
+---
+
+## 技术栈
+
+- **Vue 3** - 渐进式 JavaScript 框架
+- **TypeScript** - 类型安全的 JavaScript 超集
+- **Three.js** - WebGL 3D 图形库
+- **Vite** - 下一代前端构建工具
+
+## 功能特性
+
+- ✅ 3D 场景管理
+- ✅ 相机控制（旋转、平移、缩放）
+- ✅ 对象变换（移动、旋转、缩放）
+- ✅ 光照系统
+- ✅ 对象选择与管理
+- ✅ SDK 化设计
+
+## 快速开始
+
+```bash
+# 安装依赖
+pnpm install
+
+# 启动开发服务器
+pnpm run dev
+
+# 构建生产版本
+pnpm run build
+```
+
+## 项目结构
+
+```
+src/
+├── core/
+│   ├── SceneManager.ts   # 场景管理核心类
+│   └── index.ts          # 统一导出入口
+├── components/
+│   └── SceneView.vue     # 3D场景视图组件
+├── App.vue               # 应用主组件
+└── main.ts               # 入口文件
+```
+
+## 许可证
+
+仅供学习使用，未经授权不得用于商业用途。
