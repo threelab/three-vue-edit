@@ -77,18 +77,19 @@
           </svg>
         </button>
         <div class="toolbar-divider"></div>
-        <button 
-          class="tool-btn" 
-          :class="{ active: isAddingCube }"
-          @click="startAddCube"
-          title="添加立方体 (C)"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-          </svg>
-        </button>
+        <div class="geometry-tools">
+          <div 
+            v-for="schema in geometrySchemas" 
+            :key="schema.type"
+            class="geometry-tool-item"
+            :class="{ active: isAddingGeometry && selectedGeometryType === schema.type }"
+            @click="startAddGeometry(schema.type)"
+            :title="schema.label"
+          >
+            <span>{{ schema.icon }}</span>
+          </div>
+        </div>
+        <div class="toolbar-divider"></div>
         <button class="tool-btn" @click="deleteSelected" title="删除选中对象 (Del)">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 6h18"></path>
@@ -108,13 +109,9 @@
           <span>|</span>
           <span>面: {{ totalFaces }}</span>
         </div>
-        <div v-if="isAddingCube" class="add-cube-hint">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
-            <line x1="12" y1="22.08" x2="12" y2="12"></line>
-          </svg>
-          <span>移动鼠标到目标位置，点击添加立方体</span>
+        <div v-if="isAddingGeometry" class="add-cube-hint">
+          <span>{{ getCurrentGeometryIcon() }}</span>
+          <span>移动鼠标到目标位置，点击添加{{ getCurrentGeometryLabel() }}</span>
         </div>
       </main>
 
@@ -240,17 +237,21 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, reactive, computed } from 'vue';
 import { SceneManager } from '../core';
+import { geometryFactory, type GeometryProperties } from '../factories';
 import * as THREE from 'three';
 
 const containerRef = ref<HTMLElement | null>(null);
 const transformMode = ref<'translate' | 'rotate' | 'scale'>('translate');
 const selectedObjectId = ref<number | null>(null);
-const isAddingCube = ref(false);
+const isAddingGeometry = ref(false);
+const selectedGeometryType = ref<string>('cube');
+const currentGeometryProperties = ref<GeometryProperties>({});
 
 interface SceneObjectInfo {
   id: number;
   name: string;
   type: string;
+  geometryType: string;
   visible: boolean;
   position: { x: number; y: number; z: number };
   rotation: { x: number; y: number; z: number };
@@ -262,11 +263,14 @@ const selectedObject = reactive<SceneObjectInfo>({
   id: 0,
   name: '',
   type: '',
+  geometryType: '',
   visible: true,
   position: { x: 0, y: 0, z: 0 },
   rotation: { x: 0, y: 0, z: 0 },
   scale: { x: 0, y: 0, z: 0 }
 });
+
+const geometrySchemas = computed(() => geometryFactory.getAllSchemas());
 
 const totalVertices = computed(() => sceneObjects.value.length * 24);
 const totalFaces = computed(() => sceneObjects.value.length * 12);
@@ -274,7 +278,7 @@ const totalFaces = computed(() => sceneObjects.value.length * 12);
 let sceneManager: SceneManager | null = null;
 let objectIdCounter = 1;
 let selectedMesh: THREE.Object3D | null = null;
-let previewCube: THREE.Mesh | null = null;
+let previewGeometry: THREE.Mesh | null = null;
 let raycaster: THREE.Raycaster | null = null;
 let mouse: THREE.Vector2 | null = null;
 let gridPlane: THREE.Plane | null = null;
@@ -284,48 +288,51 @@ const setTransformMode = (mode: 'translate' | 'rotate' | 'scale') => {
   sceneManager?.setTransformMode(mode);
 };
 
-const startAddCube = () => {
+const startAddGeometry = (type: string) => {
   if (!sceneManager) return;
   
-  isAddingCube.value = !isAddingCube.value;
+  if (isAddingGeometry.value && selectedGeometryType.value === type) {
+    isAddingGeometry.value = false;
+    removePreviewGeometry();
+    return;
+  }
   
-  if (isAddingCube.value) {
-    createPreviewCube();
-  } else {
-    removePreviewCube();
+  selectedGeometryType.value = type;
+  isAddingGeometry.value = true;
+  
+  loadDefaultProperties(type);
+  createPreviewGeometry();
+};
+
+const loadDefaultProperties = (type: string) => {
+  const schema = geometryFactory.getSchema(type);
+  if (schema) {
+    currentGeometryProperties.value = geometryFactory.getDefaultProperties(schema);
   }
 };
 
-const createPreviewCube = () => {
+const createPreviewGeometry = () => {
   if (!sceneManager) return;
   
-  const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-  const material = new THREE.MeshStandardMaterial({
-    color: '#1890ff',
-    metalness: 0.3,
-    roughness: 0.4,
-    transparent: true,
-    opacity: 0.7
-  });
+  removePreviewGeometry();
   
-  previewCube = new THREE.Mesh(geometry, material);
-  previewCube.name = 'PreviewCube';
-  previewCube.visible = true;
-  
-  sceneManager.scene.add(previewCube);
+  previewGeometry = sceneManager.createPreviewGeometry(selectedGeometryType.value, [0, 0.5, 0]);
+  sceneManager.scene.add(previewGeometry);
 };
 
-const removePreviewCube = () => {
-  if (previewCube && sceneManager) {
-    sceneManager.scene.remove(previewCube);
-    previewCube.geometry.dispose();
-    (previewCube.material as THREE.Material).dispose();
-    previewCube = null;
+const removePreviewGeometry = () => {
+  if (previewGeometry && sceneManager) {
+    sceneManager.scene.remove(previewGeometry);
+    if (previewGeometry.geometry) {
+      previewGeometry.geometry.dispose();
+    }
+    (previewGeometry.material as THREE.Material).dispose();
+    previewGeometry = null;
   }
 };
 
-const updatePreviewCubePosition = (event: MouseEvent) => {
-  if (!isAddingCube.value || !previewCube || !sceneManager || !containerRef.value) return;
+const updatePreviewGeometryPosition = (event: MouseEvent) => {
+  if (!isAddingGeometry.value || !previewGeometry || !sceneManager || !containerRef.value) return;
   
   const rect = containerRef.value.getBoundingClientRect();
   const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -348,16 +355,50 @@ const updatePreviewCubePosition = (event: MouseEvent) => {
   raycaster.ray.intersectPlane(gridPlane, intersectPoint);
   
   if (intersectPoint) {
-    previewCube.position.set(
+    previewGeometry.position.set(
       Math.round(intersectPoint.x * 10) / 10,
-      0.4,
+      getGeometryYOffset(selectedGeometryType.value),
       Math.round(intersectPoint.z * 10) / 10
     );
   }
 };
 
+const getCurrentGeometryIcon = (): string => {
+  const schema = geometryFactory.getSchema(selectedGeometryType.value);
+  return schema?.icon || '📦';
+};
+
+const getCurrentGeometryLabel = (): string => {
+  const schema = geometryFactory.getSchema(selectedGeometryType.value);
+  return schema?.label || selectedGeometryType.value;
+};
+
+const getGeometryYOffset = (type: string): number => {
+  const schema = geometryFactory.getSchema(type);
+  if (!schema) return 0.5;
+  
+  const props = geometryFactory.getDefaultProperties(schema);
+  
+  switch (type) {
+    case 'cube':
+      return ((props.height as number) || 1) / 2;
+    case 'sphere':
+      return props.radius as number || 0.5;
+    case 'cylinder':
+      return ((props.height as number) || 1) / 2;
+    case 'cone':
+      return (props.height as number) || 1;
+    case 'torus':
+      return 0.5;
+    case 'plane':
+      return 0;
+    default:
+      return 0.5;
+  }
+};
+
 const handleSceneClick = (event: MouseEvent) => {
-  if (!isAddingCube.value || !sceneManager || !containerRef.value) return;
+  if (!isAddingGeometry.value || !sceneManager || !containerRef.value) return;
   
   const rect = containerRef.value.getBoundingClientRect();
   const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -380,31 +421,42 @@ const handleSceneClick = (event: MouseEvent) => {
   raycaster.ray.intersectPlane(gridPlane, intersectPoint);
   
   if (intersectPoint) {
-    addCubeAtPosition(intersectPoint.x, intersectPoint.z);
+    addGeometryAtPosition(intersectPoint.x, intersectPoint.z);
   }
   
-  isAddingCube.value = false;
-  removePreviewCube();
+  isAddingGeometry.value = false;
+  removePreviewGeometry();
 };
 
-const addCubeAtPosition = (x: number, z: number) => {
+const addGeometryAtPosition = (x: number, z: number) => {
   if (!sceneManager) return;
   
-  const cube = sceneManager.createCube({
-    size: 1,
-    color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`,
-    position: [Math.round(x * 10) / 10, 0.5, Math.round(z * 10) / 10]
+  const yOffset = getGeometryYOffset(selectedGeometryType.value);
+  const position: [number, number, number] = [
+    Math.round(x * 10) / 10,
+    yOffset,
+    Math.round(z * 10) / 10
+  ];
+  
+  const geometry = sceneManager.createGeometry({
+    type: selectedGeometryType.value,
+    position,
+    properties: { ...currentGeometryProperties.value }
   });
   
-  cube.userData = { id: objectIdCounter };
-  sceneManager.addObject(cube);
+  geometry.userData = { id: objectIdCounter, type: selectedGeometryType.value };
+  sceneManager.addObject(geometry);
+  
+  const schema = geometryFactory.getSchema(selectedGeometryType.value);
+  const label = schema?.label || selectedGeometryType.value;
   
   sceneObjects.value.push({
     id: objectIdCounter,
-    name: `Cube_${objectIdCounter}`,
+    name: `${label}_${objectIdCounter}`,
     type: 'Mesh',
+    geometryType: selectedGeometryType.value,
     visible: true,
-    position: { x: cube.position.x, y: cube.position.y, z: cube.position.z },
+    position: { x: geometry.position.x, y: geometry.position.y, z: geometry.position.z },
     rotation: { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1, z: 1 }
   });
@@ -438,7 +490,7 @@ const deleteSelected = () => {
 };
 
 const selectObjectById = (id: number) => {
-  if (isAddingCube.value) return;
+  if (isAddingGeometry.value) return;
   
   selectedObjectId.value = id;
   
@@ -457,7 +509,7 @@ const selectObjectById = (id: number) => {
 };
 
 const toggleVisibility = (id: number) => {
-  const obj = sceneObjects.value.find(o => o.id === id);
+  const obj = sceneObjects.value.find((o: SceneObjectInfo) => o.id === id);
   if (obj) {
     obj.visible = !obj.visible;
     
@@ -491,12 +543,12 @@ const syncObjectProperties = () => {
 };
 
 const handleMouseMove = (event: MouseEvent) => {
-  if (!isAddingCube.value) return;
-  updatePreviewCubePosition(event);
+  if (!isAddingGeometry.value) return;
+  updatePreviewGeometryPosition(event);
 };
 
 const handleClick = (event: MouseEvent) => {
-  if (isAddingCube.value) {
+  if (isAddingGeometry.value) {
     handleSceneClick(event);
   } else {
     handleObjectSelection(event);
@@ -520,7 +572,7 @@ const handleObjectSelection = (event: MouseEvent) => {
   mouse.set(mouseX, mouseY);
   raycaster.setFromCamera(mouse, sceneManager.camera);
   
-  const objects = sceneManager.scene.children.filter((obj) => obj instanceof THREE.Mesh && obj.name !== 'PreviewCube');
+  const objects = sceneManager.scene.children.filter((obj: THREE.Object3D) => obj instanceof THREE.Mesh && obj.name !== 'PreviewCube');
   const intersects = raycaster.intersectObjects(objects);
   
   if (intersects.length > 0) {
@@ -549,18 +601,18 @@ const handleObjectSelection = (event: MouseEvent) => {
 
 const handleKeyDown = (event: KeyboardEvent) => {
   if (event.key === 'Escape') {
-    if (isAddingCube.value) {
-      isAddingCube.value = false;
-      removePreviewCube();
+    if (isAddingGeometry.value) {
+      isAddingGeometry.value = false;
+      removePreviewGeometry();
     }
   }
 };
 
 const handleContextMenu = (event: MouseEvent) => {
-  if (isAddingCube.value) {
+  if (isAddingGeometry.value) {
     event.preventDefault();
-    isAddingCube.value = false;
-    removePreviewCube();
+    isAddingGeometry.value = false;
+    removePreviewGeometry();
   }
 };
 
@@ -575,18 +627,19 @@ onMounted(() => {
     
     sceneManager.init();
     
-    const cube = sceneManager.createCube({
-      size: 1,
-      color: '#1890ff',
-      position: [0, 0.5, 0]
+    const cube = sceneManager.createGeometry({
+      type: 'cube',
+      position: [0, 0.5, 0],
+      properties: { color: '#1890ff' }
     });
-    cube.userData = { id: objectIdCounter };
+    cube.userData = { id: objectIdCounter, type: 'cube' };
     sceneManager.addObject(cube);
     
     sceneObjects.value.push({
       id: objectIdCounter,
-      name: 'Cube_1',
+      name: '立方体_1',
       type: 'Mesh',
+      geometryType: 'cube',
       visible: true,
       position: { x: 0, y: 0.5, z: 0 },
       rotation: { x: 0, y: 0, z: 0 },
@@ -606,7 +659,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   sceneManager?.destroy();
-  removePreviewCube();
+  removePreviewGeometry();
   if (containerRef.value) {
     containerRef.value.removeEventListener('mousemove', handleMouseMove);
     containerRef.value.removeEventListener('click', handleClick);
@@ -738,6 +791,38 @@ html, body, #app {
   width: 24px;
   background: #2a2a4a;
   margin: 8px 0;
+}
+
+.geometry-tools {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  padding: 4px;
+}
+
+.geometry-tool-item {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  border-radius: 6px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 18px;
+}
+
+.geometry-tool-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.geometry-tool-item.active {
+  background: #1890ff;
+  color: #fff;
 }
 
 /* 中间场景区域 */

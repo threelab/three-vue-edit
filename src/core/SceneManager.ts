@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { geometryFactory, type GeometryProperties } from '../factories';
 
 export interface SceneManagerConfig {
   container: HTMLElement;
@@ -34,6 +35,14 @@ export interface CreateCubeOptions {
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
+}
+
+export interface CreateGeometryOptions {
+  type: string;
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: [number, number, number];
+  properties?: GeometryProperties;
 }
 
 export class SceneManager {
@@ -179,6 +188,47 @@ export class SceneManager {
     cube.scale.set(scale[0], scale[1], scale[2]);
 
     return cube;
+  }
+
+  public createGeometry(options: CreateGeometryOptions): THREE.Mesh {
+    const {
+      type,
+      position = [0, 0.5, 0],
+      rotation = [0, 0, 0],
+      scale = [1, 1, 1],
+      properties = {}
+    } = options;
+
+    const instance = geometryFactory.create(type, {
+      position,
+      rotation,
+      scale,
+      properties
+    });
+
+    const mesh = instance.mesh;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    return mesh;
+  }
+
+  public createPreviewGeometry(type: string, position: [number, number, number]): THREE.Mesh {
+    const instance = geometryFactory.createPreview(type, {
+      position,
+      scale: [1, 1, 1]
+    });
+
+    const mesh = instance.mesh;
+    return mesh;
+  }
+
+  public getAllGeometryTypes() {
+    return geometryFactory.getAllSchemas();
+  }
+
+  public getGeometrySchema(type: string) {
+    return geometryFactory.getSchema(type);
   }
 
   public selectObject(object: THREE.Object3D): void {
@@ -355,12 +405,12 @@ export class SceneManager {
   }
 
   private disposeObjectResources(object: THREE.Object3D): void {
-    object.traverse((child) => {
+    object.traverse((child: THREE.Object3D) => {
       if (child instanceof THREE.Mesh) {
         child.geometry?.dispose();
         if (child.material) {
           if (Array.isArray(child.material)) {
-            child.material.forEach(m => m.dispose());
+            child.material.forEach((m: THREE.Material) => m.dispose());
           } else {
             child.material.dispose();
           }
