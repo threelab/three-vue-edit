@@ -55,3 +55,20 @@ src/
 ## 许可证
 
 仅供学习使用，未经授权不得用于商业用途。
+
+## Git 配置
+
+如需推送代码到远程仓库，请确保已正确配置 Git 远程地址：
+
+```bash
+# 查看当前远程配置
+git remote -v
+
+# 设置正确的远程仓库地址
+git remote set-url origin git@github.com:threelab/three-vue-edit.git
+```
+
+**注意**: 如果遇到网络连接问题，请检查网络环境或使用 HTTPS 协议：
+```bash
+git remote set-url origin https://github.com/threelab/three-vue-edit.git
+```
