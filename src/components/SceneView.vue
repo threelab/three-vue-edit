@@ -104,6 +104,20 @@
           </div>
         </div>
         <div class="toolbar-divider"></div>
+        <div class="model-library">
+          <div class="tool-group-label">模型库</div>
+          <div 
+            v-for="model in modelLibrary" 
+            :key="model.type"
+            class="model-tool-item"
+            :class="{ active: isAddingModel && selectedModelType === model.type }"
+            @click="startAddModel(model.type)"
+            :title="model.label"
+          >
+            <span>{{ model.icon }}</span>
+          </div>
+        </div>
+        <div class="toolbar-divider"></div>
         <button class="tool-btn" @click="deleteSelected" title="删除选中对象 (Del)">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 6h18"></path>
@@ -130,6 +144,10 @@
         <div v-if="isAddingLight" class="add-light-hint">
           <span>💡</span>
           <span>移动鼠标到目标位置，点击添加{{ getCurrentLightLabel() }}</span>
+        </div>
+        <div v-if="isAddingModel" class="add-model-hint">
+          <span>{{ getCurrentModelIcon() }}</span>
+          <span>移动鼠标到目标位置，点击添加{{ getCurrentModelLabel() }}</span>
         </div>
       </main>
 
@@ -301,6 +319,40 @@ const isAddingLight = ref(false);
 const selectedLightType = ref<string>('point');
 const currentLightProperties = ref<LightProperties>({});
 const previewLight: { light?: THREE.Light; helper?: THREE.Object3D } = {};
+const isAddingModel = ref(false);
+const selectedModelType = ref<string>('teapot');
+
+interface ModelLibraryItem {
+  type: string;
+  label: string;
+  icon: string;
+  create: () => any;
+  yOffset: number;
+}
+
+const modelLibrary: ModelLibraryItem[] = [
+  {
+    type: 'teapot',
+    label: '茶壶',
+    icon: '🍵',
+    yOffset: 0.5,
+    create: () => createTeapotModel()
+  },
+  {
+    type: 'chair',
+    label: '椅子',
+    icon: '🪑',
+    yOffset: 0.5,
+    create: () => createChairModel()
+  },
+  {
+    type: 'table',
+    label: '桌子',
+    icon: '🪔',
+    yOffset: 0.35,
+    create: () => createTableModel()
+  }
+];
 
 interface SceneObjectInfo {
   id: number;
@@ -337,6 +389,7 @@ let previewGeometry: THREE.Mesh | null = null;
 let raycaster: THREE.Raycaster | null = null;
 let mouse: THREE.Vector2 | null = null;
 let gridPlane: THREE.Plane | null = null;
+let previewModelInstance: any = null;
 
 const setTransformMode = (mode: 'translate' | 'rotate' | 'scale') => {
   transformMode.value = mode;
@@ -805,6 +858,219 @@ const updatePreviewLight = () => {
   }
 };
 
+const createTeapotModel = (): any => {
+  const group = new (THREE as any).Group();
+  
+  const bodyGeometry = new THREE.CylinderGeometry(0.4, 0.35, 0.6, 32);
+  const lidGeometry = new THREE.CylinderGeometry(0.42, 0.4, 0.15, 32);
+  const spoutGeometry = new THREE.TorusGeometry(0.15, 0.08, 8, 16);
+  const handleGeometry = new THREE.TorusGeometry(0.3, 0.08, 8, 16);
+  
+  const material = new THREE.MeshStandardMaterial({ color: 0xd4a373, metalness: 0.2, roughness: 0.4 });
+  
+  const body = new THREE.Mesh(bodyGeometry, material);
+  body.position.y = 0.3;
+  body.castShadow = true;
+  
+  const lid = new THREE.Mesh(lidGeometry, material);
+  lid.position.y = 0.75;
+  lid.castShadow = true;
+  
+  const spout = new THREE.Mesh(spoutGeometry, material);
+  spout.position.set(0.45, 0.3, 0);
+  spout.rotation.z = -Math.PI / 2;
+  spout.castShadow = true;
+  
+  const handle = new THREE.Mesh(handleGeometry, material);
+  handle.position.set(-0.35, 0.35, 0);
+  handle.rotation.z = Math.PI / 2;
+  handle.castShadow = true;
+  
+  group.add(body, lid, spout, handle);
+  return group;
+};
+
+const createChairModel = (): any => {
+  const group = new (THREE as any).Group();
+  
+  const seatGeometry = new THREE.BoxGeometry(0.5, 0.08, 0.5);
+  const legGeometry = new THREE.CylinderGeometry(0.04, 0.04, 0.5, 8);
+  const backGeometry = new THREE.BoxGeometry(0.5, 0.6, 0.05);
+  
+  const material = new THREE.MeshStandardMaterial({ color: 0x8b4513, metalness: 0.1, roughness: 0.6 });
+  
+  const seat = new THREE.Mesh(seatGeometry, material);
+  seat.position.y = 0.5;
+  seat.castShadow = true;
+  
+  const legPositions = [
+    [-0.2, 0.25, -0.2], [0.2, 0.25, -0.2],
+    [-0.2, 0.25, 0.2], [0.2, 0.25, 0.2]
+  ];
+  
+  legPositions.forEach(pos => {
+    const leg = new THREE.Mesh(legGeometry, material);
+    leg.position.set(pos[0], pos[1], pos[2]);
+    leg.castShadow = true;
+    group.add(leg);
+  });
+  
+  const back = new THREE.Mesh(backGeometry, material);
+  back.position.set(0, 0.85, -0.225);
+  back.castShadow = true;
+  
+  group.add(seat, back);
+  return group;
+};
+
+const createTableModel = (): any => {
+  const group = new (THREE as any).Group();
+  
+  const topGeometry = new THREE.CylinderGeometry(0.7, 0.7, 0.08, 32);
+  const legGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.6, 8);
+  
+  const material = new THREE.MeshStandardMaterial({ color: 0x654321, metalness: 0.1, roughness: 0.7 });
+  
+  const top = new THREE.Mesh(topGeometry, material);
+  top.position.y = 0.65;
+  top.castShadow = true;
+  
+  const legPositions = [
+    [-0.45, 0.3, -0.45], [0.45, 0.3, -0.45],
+    [-0.45, 0.3, 0.45], [0.45, 0.3, 0.45]
+  ];
+  
+  legPositions.forEach(pos => {
+    const leg = new THREE.Mesh(legGeometry, material);
+    leg.position.set(pos[0], pos[1], pos[2]);
+    leg.castShadow = true;
+    group.add(leg);
+  });
+  
+  group.add(top);
+  return group;
+};
+
+const startAddModel = (type: string) => {
+  if (!sceneManager) return;
+  
+  if (isAddingModel.value && selectedModelType.value === type) {
+    isAddingModel.value = false;
+    removePreviewModel();
+    return;
+  }
+  
+  selectedModelType.value = type;
+  isAddingModel.value = true;
+  isAddingGeometry.value = false;
+  isAddingLight.value = false;
+  removePreviewGeometry();
+  removePreviewLight();
+  createPreviewModel();
+};
+
+const createPreviewModel = () => {
+  if (!sceneManager) return;
+  
+  removePreviewModel();
+  
+  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
+  if (modelConfig) {
+    previewModelInstance = modelConfig.create();
+    sceneManager.scene.add(previewModelInstance);
+  }
+};
+
+const removePreviewModel = () => {
+  if (previewModelInstance && sceneManager) {
+    sceneManager.scene.remove(previewModelInstance);
+    previewModelInstance.traverse((child: any) => {
+      if (child instanceof THREE.Mesh) {
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+        if (child.material) {
+          (child.material as THREE.Material).dispose();
+        }
+      }
+    });
+    previewModelInstance = null;
+  }
+};
+
+const updatePreviewModelPosition = (event: MouseEvent) => {
+  if (!isAddingModel.value || !previewModelInstance || !sceneManager || !containerRef.value) return;
+  
+  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
+  if (!modelConfig) return;
+  
+  const rect = containerRef.value.getBoundingClientRect();
+  const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  
+  if (!raycaster) {
+    raycaster = new THREE.Raycaster();
+  }
+  if (!mouse) {
+    mouse = new THREE.Vector2();
+  }
+  if (!gridPlane) {
+    gridPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  }
+  
+  mouse.set(mouseX, mouseY);
+  raycaster.setFromCamera(mouse, sceneManager.camera);
+  
+  const intersectPoint = new THREE.Vector3();
+  raycaster.ray.intersectPlane(gridPlane, intersectPoint);
+  
+  if (intersectPoint) {
+    previewModelInstance.position.set(
+      Math.round(intersectPoint.x * 10) / 10,
+      modelConfig.yOffset,
+      Math.round(intersectPoint.z * 10) / 10
+    );
+  }
+};
+
+const handleModelClick = () => {
+  if (!isAddingModel.value || !previewModelInstance || !sceneManager) return;
+  
+  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
+  if (!modelConfig) return;
+  
+  const model = modelConfig.create();
+  model.position.copy(previewModelInstance.position);
+  model.userData = { id: objectIdCounter, type: selectedModelType.value };
+  sceneManager.addObject(model);
+  
+  sceneObjects.value.push({
+    id: objectIdCounter,
+    name: `${modelConfig.label}_${objectIdCounter}`,
+    type: 'Group',
+    geometryType: selectedModelType.value,
+    visible: true,
+    position: { x: model.position.x, y: model.position.y, z: model.position.z },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1, z: 1 }
+  });
+  
+  objectIdCounter++;
+  
+  isAddingModel.value = false;
+  removePreviewModel();
+};
+
+const getCurrentModelIcon = (): string => {
+  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
+  return modelConfig?.icon || '📦';
+};
+
+const getCurrentModelLabel = (): string => {
+  const modelConfig = modelLibrary.find(m => m.type === selectedModelType.value);
+  return modelConfig?.label || selectedModelType.value;
+};
+
 const syncObjectProperties = () => {
   if (!selectedMesh || selectedObjectId.value === null) return;
   
@@ -826,6 +1092,8 @@ const handleMouseMove = (event: MouseEvent) => {
     updatePreviewGeometryPosition(event);
   } else if (isAddingLight.value) {
     updatePreviewLightPosition(event);
+  } else if (isAddingModel.value) {
+    updatePreviewModelPosition(event);
   }
 };
 
@@ -834,6 +1102,8 @@ const handleClick = (event: MouseEvent) => {
     handleSceneClick(event);
   } else if (isAddingLight.value) {
     handleLightClick();
+  } else if (isAddingModel.value) {
+    handleModelClick();
   } else {
     handleObjectSelection(event);
   }
@@ -891,6 +1161,9 @@ const handleKeyDown = (event: KeyboardEvent) => {
     } else if (isAddingLight.value) {
       isAddingLight.value = false;
       removePreviewLight();
+    } else if (isAddingModel.value) {
+      isAddingModel.value = false;
+      removePreviewModel();
     }
   }
 };
@@ -904,6 +1177,10 @@ const handleContextMenu = (event: MouseEvent) => {
     event.preventDefault();
     isAddingLight.value = false;
     removePreviewLight();
+  } else if (isAddingModel.value) {
+    event.preventDefault();
+    isAddingModel.value = false;
+    removePreviewModel();
   }
 };
 
@@ -1154,6 +1431,62 @@ html, body, #app {
   border-radius: 20px;
   font-size: 13px;
   color: #fff;
+}
+
+.add-light-hint,
+.add-model-hint {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(24, 144, 255, 0.9);
+  border-radius: 20px;
+  font-size: 13px;
+  color: #fff;
+}
+
+.add-light-hint {
+  background: rgba(255, 193, 7, 0.9);
+}
+
+.add-model-hint {
+  background: rgba(76, 175, 80, 0.9);
+}
+
+/* 模型库 */
+.model-library {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+
+.model-tool-item {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a1a30;
+  border: 1px solid #2a2a4a;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 18px;
+}
+
+.model-tool-item:hover {
+  background: #2a2a4a;
+  border-color: #3a3a5a;
+}
+
+.model-tool-item.active {
+  background: #1890ff;
+  border-color: #1890ff;
 }
 
 /* 右侧面板 */
