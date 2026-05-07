@@ -72,3 +72,28 @@ git remote set-url origin git@github.com:threelab/three-vue-edit.git
 ```bash
 git remote set-url origin https://github.com/threelab/three-vue-edit.git
 ```
+
+**网络连接问题排查**：
+
+1. **检查网络连接**
+```bash
+ping github.com
+```
+
+2. **配置代理（如在公司网络环境）**
+```bash
+# 设置 HTTP 代理
+git config --global http.proxy http://proxy.example.com:8080
+
+# 设置 HTTPS 代理
+git config --global https.proxy https://proxy.example.com:8080
+
+# 取消代理
+git config --global --unset http.proxy
+git config --global --unset https.proxy
+```
+
+3. **检查 SSH 连接**
+```bash
+ssh -T git@github.com
+```
