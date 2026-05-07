@@ -2,7 +2,7 @@ export {
   SceneManager, 
   type SceneManagerConfig, 
   type ObjectTransform, 
-  type LightConfig, 
+  type AddLightOptions, 
   type CreateCubeOptions 
 } from './SceneManager';
 

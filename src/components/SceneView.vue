@@ -90,6 +90,20 @@
           </div>
         </div>
         <div class="toolbar-divider"></div>
+        <div class="light-tools">
+          <div class="tool-group-label">灯光</div>
+          <div 
+            v-for="schema in lightSchemas" 
+            :key="schema.type"
+            class="light-tool-item"
+            :class="{ active: isAddingLight && selectedLightType === schema.type }"
+            @click="startAddLight(schema.type)"
+            :title="schema.label"
+          >
+            <span>{{ schema.icon }}</span>
+          </div>
+        </div>
+        <div class="toolbar-divider"></div>
         <button class="tool-btn" @click="deleteSelected" title="删除选中对象 (Del)">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M3 6h18"></path>
@@ -112,6 +126,10 @@
         <div v-if="isAddingGeometry" class="add-cube-hint">
           <span>{{ getCurrentGeometryIcon() }}</span>
           <span>移动鼠标到目标位置，点击添加{{ getCurrentGeometryLabel() }}</span>
+        </div>
+        <div v-if="isAddingLight" class="add-light-hint">
+          <span>💡</span>
+          <span>移动鼠标到目标位置，点击添加{{ getCurrentLightLabel() }}</span>
         </div>
       </main>
 
@@ -147,6 +165,37 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- 灯光面板 -->
+        <div class="panel-section" v-if="isAddingLight">
+          <div class="panel-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <circle cx="12" cy="12" r="6"></circle>
+              <circle cx="12" cy="12" r="2"></circle>
+            </svg>
+            <span>灯光设置</span>
+          </div>
+          <LightPanel 
+            :light-type="selectedLightType"
+            @apply-preset="handleApplyPreset"
+            @property-change="handleLightPropertyChange"
+          />
+        </div>
+        <!-- 默认灯光面板 -->
+        <div class="panel-section" v-else>
+          <div class="panel-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <circle cx="12" cy="12" r="6"></circle>
+              <circle cx="12" cy="12" r="2"></circle>
+            </svg>
+            <span>灯光</span>
+          </div>
+          <LightPanel 
+            @apply-preset="handleApplyPreset"
+          />
         </div>
 
         <!-- 属性面板 -->
@@ -237,7 +286,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, reactive, computed } from 'vue';
 import { SceneManager } from '../core';
-import { geometryFactory, type GeometryProperties } from '../factories';
+import { geometryFactory, type GeometryProperties, type LightProperties } from '../factories';
+import { lightSchemas } from '../schemas/LightSchema';
+import LightPanel from './LightPanel.vue';
 import * as THREE from 'three';
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -246,6 +297,10 @@ const selectedObjectId = ref<number | null>(null);
 const isAddingGeometry = ref(false);
 const selectedGeometryType = ref<string>('cube');
 const currentGeometryProperties = ref<GeometryProperties>({});
+const isAddingLight = ref(false);
+const selectedLightType = ref<string>('point');
+const currentLightProperties = ref<LightProperties>({});
+const previewLight: { light?: THREE.Light; helper?: THREE.Object3D } = {};
 
 interface SceneObjectInfo {
   id: number;
@@ -371,6 +426,11 @@ const getCurrentGeometryIcon = (): string => {
 const getCurrentGeometryLabel = (): string => {
   const schema = geometryFactory.getSchema(selectedGeometryType.value);
   return schema?.label || selectedGeometryType.value;
+};
+
+const getCurrentLightLabel = (): string => {
+  const schema = lightSchemas.find(s => s.type === selectedLightType.value);
+  return schema?.label || selectedLightType.value;
 };
 
 const getGeometryYOffset = (type: string): number => {
@@ -526,6 +586,225 @@ const showMenu = (menu: string) => {
   console.log('Menu:', menu);
 };
 
+const startAddLight = (type: string) => {
+  if (!sceneManager) return;
+  
+  // 如果点击的是当前选中的灯光类型，取消添加模式
+  if (isAddingLight.value && selectedLightType.value === type) {
+    isAddingLight.value = false;
+    removePreviewLight();
+    return;
+  }
+  
+  // 设置选中的灯光类型
+  selectedLightType.value = type;
+  isAddingLight.value = true;
+  isAddingGeometry.value = false;
+  
+  // 加载默认属性
+  const schema = lightSchemas.find(s => s.type === type);
+  if (schema) {
+    currentLightProperties.value = {};
+    schema.properties.forEach(prop => {
+      currentLightProperties.value[prop.name] = prop.default;
+    });
+  }
+  
+  // 创建预览灯光
+  createPreviewLight();
+};
+
+const createPreviewLight = () => {
+  if (!sceneManager) return;
+  
+  // 移除已有的预览灯光
+  removePreviewLight();
+  
+  const schema = lightSchemas.find(s => s.type === selectedLightType.value);
+  if (!schema) return;
+  
+  let light: THREE.Light;
+  const color = (currentLightProperties.value.color as string) || '#ffffff';
+  const intensity = (currentLightProperties.value.intensity as number) || 1;
+  
+  switch (selectedLightType.value) {
+    case 'ambient':
+      light = new THREE.AmbientLight(color, intensity * 0.5);
+      break;
+    case 'directional':
+      light = new THREE.DirectionalLight(color, intensity * 0.5);
+      break;
+    case 'point':
+      light = new THREE.PointLight(color, intensity * 0.5);
+      break;
+    case 'spot':
+      light = new THREE.SpotLight(color, intensity * 0.5);
+      break;
+    case 'hemisphere':
+      const skyColor = (currentLightProperties.value.skyColor as string) || '#87ceeb';
+      const groundColor = (currentLightProperties.value.groundColor as string) || '#696969';
+      light = new THREE.HemisphereLight(skyColor, groundColor, intensity * 0.5);
+      break;
+    case 'rectArea':
+      const width = (currentLightProperties.value.width as number) || 1;
+      const height = (currentLightProperties.value.height as number) || 1;
+      light = new THREE.RectAreaLight(color, intensity * 0.5, width, height);
+      break;
+    default:
+      light = new THREE.PointLight(color, intensity * 0.5);
+  }
+  
+  // 设置初始位置
+  const defaultPos = schema.previewConfig.position;
+  light.position.set(defaultPos[0], defaultPos[1], defaultPos[2]);
+  light.name = 'PreviewLight';
+  
+  // 创建辅助对象
+  let helper: THREE.Object3D | undefined;
+  if (selectedLightType.value === 'point') {
+    helper = new THREE.PointLightHelper(light as THREE.PointLight, 0.3);
+  } else if (selectedLightType.value === 'spot') {
+    helper = new THREE.SpotLightHelper(light as THREE.SpotLight);
+  } else if (selectedLightType.value === 'directional') {
+    helper = new THREE.DirectionalLightHelper(light as THREE.DirectionalLight, 1);
+  }
+  
+  sceneManager.scene.add(light);
+  if (helper) {
+    sceneManager.scene.add(helper);
+    previewLight.helper = helper;
+  }
+  previewLight.light = light;
+};
+
+const updatePreviewLightPosition = (event: MouseEvent) => {
+  if (!isAddingLight.value || !previewLight.light || !sceneManager || !containerRef.value) return;
+  
+  const rect = containerRef.value.getBoundingClientRect();
+  const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  
+  if (!raycaster) raycaster = new THREE.Raycaster();
+  if (!mouse) mouse = new THREE.Vector2();
+  if (!gridPlane) gridPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  
+  mouse.set(mouseX, mouseY);
+  raycaster.setFromCamera(mouse, sceneManager.camera);
+  
+  const intersectPoint = new THREE.Vector3();
+  raycaster.ray.intersectPlane(gridPlane, intersectPoint);
+  
+  if (intersectPoint) {
+    previewLight.light.position.set(
+      Math.round(intersectPoint.x * 10) / 10,
+      2,
+      Math.round(intersectPoint.z * 10) / 10
+    );
+    
+    // 更新辅助对象
+    if (previewLight.helper) {
+      (previewLight.helper.position as THREE.Vector3).set(
+        previewLight.light.position.x,
+        previewLight.light.position.y,
+        previewLight.light.position.z
+      );
+    }
+  }
+};
+
+const removePreviewLight = () => {
+  if (!sceneManager) return;
+  
+  if (previewLight.light) {
+    sceneManager.scene.remove(previewLight.light);
+    previewLight.light.dispose?.();
+    previewLight.light = undefined;
+  }
+  if (previewLight.helper) {
+    sceneManager.scene.remove(previewLight.helper);
+    previewLight.helper = undefined;
+  }
+};
+
+const handleLightClick = () => {
+  if (!isAddingLight.value || !previewLight.light || !sceneManager) return;
+  
+  // 获取预览灯光的位置
+  const position: [number, number, number] = [
+    previewLight.light.position.x,
+    previewLight.light.position.y,
+    previewLight.light.position.z
+  ];
+  
+  // 添加正式灯光
+  sceneManager.addLight({
+    type: selectedLightType.value,
+    properties: { ...currentLightProperties.value },
+    position
+  });
+  
+  // 清除预览状态
+  isAddingLight.value = false;
+  removePreviewLight();
+};
+
+const handleApplyPreset = (presetName: string) => {
+  if (!sceneManager) return;
+  sceneManager.applyLightPreset(presetName);
+};
+
+const handleLightPropertyChange = (properties: LightProperties) => {
+  currentLightProperties.value = properties;
+  // 实时更新预览灯光
+  updatePreviewLight();
+};
+
+const updatePreviewLight = () => {
+  if (!sceneManager || !previewLight.light) return;
+  
+  const light = previewLight.light;
+  
+  if ('intensity' in light && currentLightProperties.value.intensity !== undefined) {
+    (light as any).intensity = currentLightProperties.value.intensity as number;
+  }
+  
+  if ('color' in light && currentLightProperties.value.color !== undefined) {
+    (light as any).color.set(currentLightProperties.value.color as string);
+  }
+  
+  if ('decay' in light && currentLightProperties.value.decay !== undefined) {
+    (light as any).decay = currentLightProperties.value.decay as number;
+  }
+  
+  if ('distance' in light && currentLightProperties.value.distance !== undefined) {
+    (light as any).distance = currentLightProperties.value.distance as number;
+  }
+  
+  if ('angle' in light && currentLightProperties.value.angle !== undefined) {
+    (light as any).angle = currentLightProperties.value.angle as number;
+  }
+  
+  if ('penumbra' in light && currentLightProperties.value.penumbra !== undefined) {
+    (light as any).penumbra = currentLightProperties.value.penumbra as number;
+  }
+  
+  if ('castShadow' in light && currentLightProperties.value.castShadow !== undefined) {
+    (light as any).castShadow = currentLightProperties.value.castShadow as boolean;
+  }
+  
+  if ('groundColor' in light && currentLightProperties.value.groundColor !== undefined) {
+    (light as any).groundColor.set(currentLightProperties.value.groundColor as string);
+  }
+  
+  if ('width' in light && currentLightProperties.value.width !== undefined) {
+    (light as any).width = currentLightProperties.value.width as number;
+  }
+  
+  if ('height' in light && currentLightProperties.value.height !== undefined) {
+    (light as any).height = currentLightProperties.value.height as number;
+  }
+};
+
 const syncObjectProperties = () => {
   if (!selectedMesh || selectedObjectId.value === null) return;
   
@@ -543,13 +822,18 @@ const syncObjectProperties = () => {
 };
 
 const handleMouseMove = (event: MouseEvent) => {
-  if (!isAddingGeometry.value) return;
-  updatePreviewGeometryPosition(event);
+  if (isAddingGeometry.value) {
+    updatePreviewGeometryPosition(event);
+  } else if (isAddingLight.value) {
+    updatePreviewLightPosition(event);
+  }
 };
 
 const handleClick = (event: MouseEvent) => {
   if (isAddingGeometry.value) {
     handleSceneClick(event);
+  } else if (isAddingLight.value) {
+    handleLightClick();
   } else {
     handleObjectSelection(event);
   }
@@ -604,6 +888,9 @@ const handleKeyDown = (event: KeyboardEvent) => {
     if (isAddingGeometry.value) {
       isAddingGeometry.value = false;
       removePreviewGeometry();
+    } else if (isAddingLight.value) {
+      isAddingLight.value = false;
+      removePreviewLight();
     }
   }
 };
@@ -613,6 +900,10 @@ const handleContextMenu = (event: MouseEvent) => {
     event.preventDefault();
     isAddingGeometry.value = false;
     removePreviewGeometry();
+  } else if (isAddingLight.value) {
+    event.preventDefault();
+    isAddingLight.value = false;
+    removePreviewLight();
   }
 };
 

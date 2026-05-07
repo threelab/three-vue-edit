@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import { geometryFactory, type GeometryProperties } from '../factories';
+import { geometryFactory, lightFactory, type GeometryProperties, type LightProperties } from '../factories';
 
 export interface SceneManagerConfig {
   container: HTMLElement;
@@ -22,13 +22,6 @@ export interface ObjectTransform {
   scale: [number, number, number];
 }
 
-export interface LightConfig {
-  type: 'ambient' | 'directional' | 'point' | 'spot';
-  color?: string;
-  intensity?: number;
-  position?: [number, number, number];
-}
-
 export interface CreateCubeOptions {
   size?: number;
   color?: string;
@@ -45,6 +38,12 @@ export interface CreateGeometryOptions {
   properties?: GeometryProperties;
 }
 
+export interface AddLightOptions {
+  type: string;
+  properties?: LightProperties;
+  position?: [number, number, number];
+}
+
 export class SceneManager {
   public readonly scene: THREE.Scene;
   public readonly camera: THREE.PerspectiveCamera;
@@ -55,6 +54,7 @@ export class SceneManager {
   private container: HTMLElement;
   private animationFrameId: number | null = null;
   private objects: THREE.Object3D[] = [];
+  private lights: THREE.Light[] = [];
   private selectedObject: THREE.Object3D | null = null;
   private isInitialized: boolean = false;
 
@@ -268,39 +268,58 @@ export class SceneManager {
     object.scale.set(transform.scale[0], transform.scale[1], transform.scale[2]);
   }
 
-  public addLight(config: LightConfig): THREE.Light | null {
-    let light: THREE.Light | null = null;
-
-    switch (config.type) {
-      case 'ambient':
-        light = new THREE.AmbientLight(config.color ?? '#ffffff', config.intensity ?? 0.5);
-        break;
-      case 'directional':
-        light = new THREE.DirectionalLight(config.color ?? '#ffffff', config.intensity ?? 1);
-        if (config.position) {
-          light.position.set(config.position[0], config.position[1], config.position[2]);
-        }
-        light.castShadow = true;
-        break;
-      case 'point':
-        light = new THREE.PointLight(config.color ?? '#ffffff', config.intensity ?? 1);
-        if (config.position) {
-          light.position.set(config.position[0], config.position[1], config.position[2]);
-        }
-        break;
-      case 'spot':
-        light = new THREE.SpotLight(config.color ?? '#ffffff', config.intensity ?? 1);
-        if (config.position) {
-          light.position.set(config.position[0], config.position[1], config.position[2]);
-        }
-        break;
+  public addLight(options: AddLightOptions): THREE.Light | null {
+    try {
+      const instance = lightFactory.create(options.type, {
+        position: options.position,
+        properties: options.properties
+      });
+      
+      this.scene.add(instance.light);
+      this.lights.push(instance.light);
+      
+      if (instance.helper) {
+        this.scene.add(instance.helper);
+      }
+      
+      return instance.light;
+    } catch (error) {
+      console.error('Failed to add light:', error);
+      return null;
     }
+  }
 
-    if (light) {
-      this.scene.add(light);
+  public applyLightPreset(presetName: string): void {
+    try {
+      // 清除现有灯光
+      this.clearLights();
+      
+      // 应用预设
+      const instances = lightFactory.applyPreset(presetName);
+      
+      instances.forEach((instance) => {
+        this.scene.add(instance.light);
+        this.lights.push(instance.light);
+        
+        if (instance.helper) {
+          this.scene.add(instance.helper);
+        }
+      });
+    } catch (error) {
+      console.error('Failed to apply light preset:', error);
     }
+  }
 
-    return light;
+  public clearLights(): void {
+    this.lights.forEach((light) => {
+      this.scene.remove(light);
+      light.dispose?.();
+    });
+    this.lights = [];
+  }
+
+  public getLights(): THREE.Light[] {
+    return [...this.lights];
   }
 
   public getObjects(): THREE.Object3D[] {

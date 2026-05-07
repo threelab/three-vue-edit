@@ -133,14 +133,48 @@ declare module 'three' {
 
   export class DirectionalLight extends Light {
     constructor(color?: Color | string, intensity?: number);
+    target: Object3D;
+    castShadow: boolean;
   }
 
   export class PointLight extends Light {
-    constructor(color?: Color | string, intensity?: number, distance?: number);
+    constructor(color?: Color | string, intensity?: number, distance?: number, decay?: number);
+    castShadow: boolean;
   }
 
   export class SpotLight extends Light {
-    constructor(color?: Color | string, intensity?: number, distance?: number);
+    constructor(color?: Color | string, intensity?: number, distance?: number, angle?: number, penumbra?: number, decay?: number);
+    angle: number;
+    penumbra: number;
+    decay: number;
+    target: Object3D;
+  }
+
+  export class HemisphereLight extends Light {
+    constructor(skyColor?: Color | string, groundColor?: Color | string, intensity?: number);
+  }
+
+  export class RectAreaLight extends Light {
+    constructor(color?: Color | string, intensity?: number, width?: number, height?: number);
+    width: number;
+    height: number;
+    target: Object3D;
+  }
+
+  export class PointLightHelper extends Object3D {
+    constructor(light: PointLight, size?: number);
+  }
+
+  export class SpotLightHelper extends Object3D {
+    constructor(light: SpotLight);
+  }
+
+  export class DirectionalLightHelper extends Object3D {
+    constructor(light: DirectionalLight, size?: number);
+  }
+
+  export class RectAreaLightHelper extends Object3D {
+    constructor(light: RectAreaLight);
   }
 
   export class PerspectiveCamera extends Object3D {
