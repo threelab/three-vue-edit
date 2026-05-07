@@ -591,7 +591,7 @@ const addGeometryAtPosition = async (x: number, z: number) => {
   const schema = geometryFactory.getSchema(selectedGeometryType.value);
   const label = schema?.label || selectedGeometryType.value;
   
-  sceneObjects.value.push({
+  const newObjectInfo = {
     id: objectIdCounter,
     name: `${label}_${objectIdCounter}`,
     type: geometry instanceof THREE.Group ? 'Group' : 'Mesh',
@@ -600,7 +600,15 @@ const addGeometryAtPosition = async (x: number, z: number) => {
     position: { x: geometry.position.x, y: geometry.position.y, z: geometry.position.z },
     rotation: { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1, z: 1 }
-  });
+  };
+  
+  sceneObjects.value.push(newObjectInfo);
+  
+  // 自动选中刚创建的对象
+  selectedObjectId.value = objectIdCounter;
+  Object.assign(selectedObject, newObjectInfo);
+  selectedMesh = geometry;
+  sceneManager.selectObject(geometry);
   
   objectIdCounter++;
 };
@@ -818,11 +826,41 @@ const handleLightClick = () => {
   ];
   
   // 添加正式灯光
-  sceneManager.addLight({
+  const newLight = sceneManager.addLight({
     type: selectedLightType.value,
     properties: { ...currentLightProperties.value },
     position
   });
+  
+  if (newLight) {
+    // 设置灯光的userData，使其可以被选中和管理
+    newLight.userData = { id: objectIdCounter, type: selectedLightType.value };
+    
+    // 添加到sceneObjects列表
+    const schema = lightSchemas.find(s => s.type === selectedLightType.value);
+    const label = schema?.label || selectedLightType.value;
+    
+    const newObjectInfo = {
+      id: objectIdCounter,
+      name: `${label}_${objectIdCounter}`,
+      type: 'Light',
+      geometryType: selectedLightType.value,
+      visible: true,
+      position: { x: position[0], y: position[1], z: position[2] },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 }
+    };
+    
+    sceneObjects.value.push(newObjectInfo);
+    
+    // 自动选中刚创建的灯光
+    selectedObjectId.value = objectIdCounter;
+    Object.assign(selectedObject, newObjectInfo);
+    selectedMesh = newLight;
+    sceneManager.selectObject(newLight);
+    
+    objectIdCounter++;
+  }
   
   // 清除预览状态
   isAddingLight.value = false;
@@ -911,6 +949,11 @@ const handleMouseMove = (event: MouseEvent) => {
 };
 
 const handleClick = (event: MouseEvent) => {
+  // 如果正在使用 TransformControls，则不处理点击选择
+  if (sceneManager && (sceneManager.transformControls as any).dragging) {
+    return;
+  }
+  
   if (isAddingGeometry.value) {
     handleSceneClick(event);
   } else if (isAddingLight.value) {
@@ -922,6 +965,11 @@ const handleClick = (event: MouseEvent) => {
 
 const handleObjectSelection = (event: MouseEvent) => {
   if (!sceneManager || !containerRef.value) return;
+  
+  // 检查是否正在使用 TransformControls
+  if ((sceneManager.transformControls as any).dragging) {
+    return;
+  }
   
   const rect = containerRef.value.getBoundingClientRect();
   const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;

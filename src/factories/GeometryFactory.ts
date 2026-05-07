@@ -214,20 +214,26 @@ export class GeometryFactory {
       const spoutGeo = new THREE.TorusGeometry(0.15 * size, 0.08 * size, 8, 16);
       const handleGeo = new THREE.TorusGeometry(0.3 * size, 0.08 * size, 8, 16);
       
-      const body = new THREE.Mesh(bodyGeo);
+      const ceramicMat = new THREE.MeshStandardMaterial({ 
+        color: 0xD4A574, 
+        metalness: 0.1, 
+        roughness: 0.3 
+      });
+      
+      const body = new THREE.Mesh(bodyGeo, ceramicMat);
       body.position.y = 0.3 * size;
       body.castShadow = true;
       
-      const lid = new THREE.Mesh(lidGeo);
+      const lid = new THREE.Mesh(lidGeo, ceramicMat);
       lid.position.y = 0.75 * size;
       lid.castShadow = true;
       
-      const spout = new THREE.Mesh(spoutGeo);
+      const spout = new THREE.Mesh(spoutGeo, ceramicMat);
       spout.position.set(0.45 * size, 0.3 * size, 0);
       spout.rotation.z = -Math.PI / 2;
       spout.castShadow = true;
       
-      const handle = new THREE.Mesh(handleGeo);
+      const handle = new THREE.Mesh(handleGeo, ceramicMat);
       handle.position.set(-0.35 * size, 0.35 * size, 0);
       handle.rotation.z = Math.PI / 2;
       handle.castShadow = true;
@@ -245,7 +251,13 @@ export class GeometryFactory {
       const legGeo = new THREE.CylinderGeometry(0.04 * size, 0.04 * size, 0.5 * size, 8);
       const backGeo = new THREE.BoxGeometry(0.5 * size, 0.6 * size, 0.05 * size);
       
-      const seat = new THREE.Mesh(seatGeo);
+      const woodMat = new THREE.MeshStandardMaterial({ 
+        color: 0x8B4513, 
+        metalness: 0.0, 
+        roughness: 0.8 
+      });
+      
+      const seat = new THREE.Mesh(seatGeo, woodMat);
       seat.position.y = 0.5 * size;
       seat.castShadow = true;
       
@@ -257,13 +269,13 @@ export class GeometryFactory {
       ];
       
       legPositions.forEach(pos => {
-        const leg = new THREE.Mesh(legGeo);
+        const leg = new THREE.Mesh(legGeo, woodMat);
         leg.position.set(pos[0], pos[1], pos[2]);
         leg.castShadow = true;
         group.add(leg);
       });
       
-      const back = new THREE.Mesh(backGeo);
+      const back = new THREE.Mesh(backGeo, woodMat);
       back.position.set(0, 0.85 * size, -0.225 * size);
       back.castShadow = true;
       
@@ -279,7 +291,18 @@ export class GeometryFactory {
       const topGeo = new THREE.CylinderGeometry(0.7 * size, 0.7 * size, 0.08 * size, 32);
       const legGeo = new THREE.CylinderGeometry(0.05 * size, 0.05 * size, 0.6 * size, 8);
       
-      const top = new THREE.Mesh(topGeo);
+      const tableTopMat = new THREE.MeshStandardMaterial({ 
+        color: 0xDEB887, 
+        metalness: 0.0, 
+        roughness: 0.7 
+      });
+      const tableLegMat = new THREE.MeshStandardMaterial({ 
+        color: 0x8B4513, 
+        metalness: 0.0, 
+        roughness: 0.8 
+      });
+      
+      const top = new THREE.Mesh(topGeo, tableTopMat);
       top.position.y = 0.65 * size;
       top.castShadow = true;
       
@@ -291,7 +314,7 @@ export class GeometryFactory {
       ];
       
       legPositions.forEach(pos => {
-        const leg = new THREE.Mesh(legGeo);
+        const leg = new THREE.Mesh(legGeo, tableLegMat);
         leg.position.set(pos[0], pos[1], pos[2]);
         leg.castShadow = true;
         group.add(leg);

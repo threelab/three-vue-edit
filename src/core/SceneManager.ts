@@ -50,6 +50,7 @@ export class SceneManager {
   public readonly renderer: THREE.WebGLRenderer;
   public readonly orbitControls: OrbitControls;
   public readonly transformControls: TransformControls;
+  public readonly transformControlsHelper: THREE.Object3D;
 
   private container: HTMLElement;
   private animationFrameId: number | null = null;
@@ -94,7 +95,10 @@ export class SceneManager {
     this.orbitControls.enableZoom = true;
 
     this.transformControls = new TransformControls(this.camera, this.renderer.domElement);
-
+    // 添加 TransformControls helper 到场景中（关键！）
+    this.transformControlsHelper = this.transformControls.getHelper();
+    this.scene.add(this.transformControlsHelper);
+    
     this.setupEventListeners();
 
     if (config.enableGrid !== false) {
@@ -110,7 +114,12 @@ export class SceneManager {
     }
     
     this.container.appendChild(this.renderer.domElement);
-    this.setupClickHandler();
+    // TransformControls 不需要添加到场景中，它通过 DOM 和事件工作
+    // this.scene.add(this.transformControls);
+    // 确保 TransformControls 的 DOM 元素能正确访问
+    console.log('TransformControls initialized, domElement:', this.transformControls.domElement);
+    // 不再设置点击事件，由 SceneView.vue 统一处理
+    // this.setupClickHandler();
     this.startRenderLoop();
     this.isInitialized = true;
   }
@@ -148,6 +157,13 @@ export class SceneManager {
     if (index > -1) {
       this.objects.splice(index, 1);
     }
+    
+    // 如果是灯光，也从lights数组中移除
+    const lightIndex = this.lights.indexOf(object as THREE.Light);
+    if (lightIndex > -1) {
+      this.lights.splice(lightIndex, 1);
+    }
+    
     if (this.selectedObject === object) {
       this.deselectObject();
     }
@@ -239,9 +255,13 @@ export class SceneManager {
   public selectObject(object: THREE.Object3D): void {
     if (this.selectedObject === object) return;
     
+    console.log('Selecting object:', object.name, object);
+    
     this.deselectObject();
     this.selectedObject = object;
     this.transformControls.attach(object);
+    
+    console.log('TransformControls attached to:', object.name);
   }
 
   public deselectObject(): void {
@@ -282,6 +302,8 @@ export class SceneManager {
       
       this.scene.add(instance.light);
       this.lights.push(instance.light);
+      // 同时添加到objects数组，以便点击选中时也能检测到灯光
+      this.objects.push(instance.light);
       
       if (instance.helper) {
         this.scene.add(instance.helper);
@@ -317,6 +339,11 @@ export class SceneManager {
 
   public clearLights(): void {
     this.lights.forEach((light) => {
+      // 从objects数组中移除
+      const index = this.objects.indexOf(light);
+      if (index > -1) {
+        this.objects.splice(index, 1);
+      }
       this.scene.remove(light);
       light.dispose?.();
     });
@@ -360,12 +387,9 @@ export class SceneManager {
   }
 
   private setupEventListeners(): void {
-    this.transformControls.addEventListener('mouseDown', () => {
-      this.orbitControls.enabled = false;
-    });
-
-    this.transformControls.addEventListener('mouseUp', () => {
-      this.orbitControls.enabled = true;
+    // 使用 dragging-changed 事件，这是更可靠的方式
+    (this.transformControls as any).addEventListener('dragging-changed', (event: any) => {
+      this.orbitControls.enabled = !event.value;
     });
 
     this.transformControls.addEventListener('objectChange', () => {
