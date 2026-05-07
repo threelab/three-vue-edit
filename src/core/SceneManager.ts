@@ -14,6 +14,7 @@ export interface SceneManagerConfig {
   enableGrid?: boolean;
 }
 
+
 export interface ObjectTransform {
   position: [number, number, number];
   rotation: [number, number, number];
@@ -84,7 +85,6 @@ export class SceneManager {
     this.orbitControls.enableZoom = true;
 
     this.transformControls = new TransformControls(this.camera, this.renderer.domElement);
-    this.scene.add(this.transformControls);
 
     this.setupEventListeners();
 
