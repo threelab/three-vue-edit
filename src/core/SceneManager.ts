@@ -95,9 +95,15 @@ export class SceneManager {
     this.orbitControls.enableZoom = true;
 
     this.transformControls = new TransformControls(this.camera, this.renderer.domElement);
+    // 确保 TransformControls 启用
+    this.transformControls.enabled = true;
     // 添加 TransformControls helper 到场景中（关键！）
     this.transformControlsHelper = this.transformControls.getHelper();
+    // 初始化时隐藏 helper，选中对象时再显示
+    this.transformControlsHelper.visible = false;
     this.scene.add(this.transformControlsHelper);
+    console.log('TransformControls initialized:', this.transformControls);
+    console.log('TransformControls helper added to scene:', this.transformControlsHelper);
     
     this.setupEventListeners();
 
@@ -261,6 +267,9 @@ export class SceneManager {
     this.selectedObject = object;
     this.transformControls.attach(object);
     
+    // 确保 helper 可见
+    this.transformControlsHelper.visible = true;
+    
     console.log('TransformControls attached to:', object.name);
   }
 
@@ -268,6 +277,8 @@ export class SceneManager {
     if (this.selectedObject) {
       this.transformControls.detach();
       this.selectedObject = null;
+      // 隐藏 helper
+      this.transformControlsHelper.visible = false;
     }
   }
 
@@ -362,7 +373,7 @@ export class SceneManager {
     return this.objects.find(obj => obj.name === name);
   }
 
-  public getObjectById(id: string): THREE.Object3D | undefined {
+  public getObjectById(id: number): THREE.Object3D | undefined {
     return this.objects.find(obj => (obj as any).userData.id === id);
   }
 

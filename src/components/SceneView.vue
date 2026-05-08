@@ -648,10 +648,14 @@ const selectObjectById = (id: number) => {
     Object.assign(selectedObject, objInfo);
     
     if (sceneManager) {
-      const mesh = sceneManager.scene.getObjectById(id);
+      // 使用我们自己的 getObjectById 方法，它会查找 userData.id
+      const mesh = sceneManager.getObjectById(id);
       if (mesh) {
         selectedMesh = mesh;
         sceneManager.selectObject(mesh);
+        console.log('Object selected, TransformControls should be visible');
+      } else {
+        console.log('Object not found with id:', id);
       }
     }
   }
@@ -989,6 +993,7 @@ const handleObjectSelection = (event: MouseEvent) => {
   const intersects = raycaster.intersectObjects(allObjects, true);
   
   if (intersects.length > 0) {
+    // 检测到 Mesh 对象
     let target = intersects[0].object;
     while (target.parent && !allObjects.includes(target)) {
       target = target.parent;
@@ -997,21 +1002,55 @@ const handleObjectSelection = (event: MouseEvent) => {
       selectObjectById(target.userData.id);
     }
   } else {
-    sceneManager.deselectObject();
-    selectedObjectId.value = null;
-    selectedObject.id = 0;
-    selectedObject.name = '';
-    selectedObject.type = '';
-    selectedObject.position.x = 0;
-    selectedObject.position.y = 0;
-    selectedObject.position.z = 0;
-    selectedObject.rotation.x = 0;
-    selectedObject.rotation.y = 0;
-    selectedObject.rotation.z = 0;
-    selectedObject.scale.x = 0;
-    selectedObject.scale.y = 0;
-    selectedObject.scale.z = 0;
-    selectedMesh = null;
+    // 没有检测到 Mesh，尝试检测灯光
+    const lights = sceneManager.getLights();
+    let closestLight: THREE.Light | null = null;
+    let closestDistance = Infinity;
+    const threshold = 50; // 像素阈值
+    
+    lights.forEach(light => {
+      if (light.userData.id) {
+        // 将灯光位置转换为屏幕坐标
+        const screenPos = light.position.clone();
+        screenPos.project(sceneManager.camera);
+        
+        // 转换为像素坐标
+        const screenX = (screenPos.x * 0.5 + 0.5) * rect.width;
+        const screenY = (-screenPos.y * 0.5 + 0.5) * rect.height;
+        
+        // 计算与点击位置的距离
+        const clickX = event.clientX - rect.left;
+        const clickY = event.clientY - rect.top;
+        const distance = Math.sqrt(Math.pow(screenX - clickX, 2) + Math.pow(screenY - clickY, 2));
+        
+        if (distance < threshold && distance < closestDistance) {
+          closestDistance = distance;
+          closestLight = light;
+        }
+      }
+    });
+    
+    if (closestLight) {
+      // 选中灯光
+      selectObjectById(closestLight.userData.id);
+    } else {
+      // 什么都没点击到，取消选择
+      sceneManager.deselectObject();
+      selectedObjectId.value = null;
+      selectedObject.id = 0;
+      selectedObject.name = '';
+      selectedObject.type = '';
+      selectedObject.position.x = 0;
+      selectedObject.position.y = 0;
+      selectedObject.position.z = 0;
+      selectedObject.rotation.x = 0;
+      selectedObject.rotation.y = 0;
+      selectedObject.rotation.z = 0;
+      selectedObject.scale.x = 0;
+      selectedObject.scale.y = 0;
+      selectedObject.scale.z = 0;
+      selectedMesh = null;
+    }
   }
 };
 
